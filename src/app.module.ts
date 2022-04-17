@@ -3,9 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { NFT, NFTSchema } from './schemas/nft.schema';
-import { ContractsService } from './contracts/contracts.service';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import Web3 from 'web3';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
@@ -16,20 +14,6 @@ import Web3 from 'web3';
     MongooseModule.forFeature([{ name: NFT.name, schema: NFTSchema }]),
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    {
-      provide: ContractsService,
-      useFactory: async (configService: ConfigService) => {
-        return new ContractsService(
-          configService.get<string>('PRIVATE_KEY'),
-          configService.get<string>('PUBLIC_KEY'),
-          configService.get<string>('CONTRACT_ADDRESS'),
-          new Web3(configService.get('API_URL')),
-        );
-      },
-      inject: [ConfigService],
-    },
-  ],
+  providers: [AppService],
 })
 export class AppModule {}
