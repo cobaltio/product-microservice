@@ -14,8 +14,8 @@ export class AppController {
 
   @UseInterceptors(ClassSerializerInterceptor)
   @MessagePattern({ cmd: 'create-nft' })
-  async create(nft: CreateNftDto): Promise<NFTEntity | void> {
-    return new NFTEntity(await this.appService.createNFT(nft));
+  async create(nft: CreateNftDto) {
+    return this.appService.createNFT(nft);
   }
 
   @MessagePattern({ cmd: 'add-nft' })

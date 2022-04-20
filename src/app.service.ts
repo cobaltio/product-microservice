@@ -1,33 +1,163 @@
-import { Injectable } from '@nestjs/common';
+import { CACHE_MANAGER, Inject, Injectable } from '@nestjs/common';
 import { CreateNftDto } from './schemas/create-nft.dto';
 import { NFT, NFTDocument } from './schemas/nft.schema';
 import { Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
-import { ContractsService, mintTxResult } from './contracts/contracts.service';
+import Web3 from 'web3';
+import { Contract } from 'web3-eth-contract';
+import mintNftContract from './contracts/MyNFT.json';
+import { AbiItem } from 'web3-utils';
+import { ConfigService } from '@nestjs/config';
+import { Cache } from 'cache-manager';
+import sha3 from 'crypto-js/sha256';
+import CryptoJS from 'crypto-js';
+import {
+  signTypedData,
+  SignTypedDataVersion,
+  recoverTypedSignature,
+  TypedMessage,
+  MessageTypes,
+} from '@metamask/eth-sig-util';
+
+type mintTxResult = {
+  tx_hash: string;
+  item_id: string;
+  contract_address: string;
+  contract_type: string;
+  supply: number;
+  chain: string;
+  owner: string;
+};
 
 @Injectable()
 export class AppService {
+  private contract: Contract;
+  private readonly private_key: string; // private key of wallet which deployed the smart contract.
+  private readonly contract_address: string;
+  private web3: Web3;
+
   constructor(
     @InjectModel(NFT.name) private nftModel: Model<NFTDocument>,
-    private contractsService: ContractsService,
-  ) {}
+    private configService: ConfigService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) {
+    this.private_key = this.configService.get<string>('PRIVATE_KEY');
+    this.contract_address = this.configService.get<string>('CONTRACT_ADDRESS');
+    this.web3 = new Web3(this.configService.get('API_URL'));
 
-  async createNFT(nft: CreateNftDto): Promise<NFTDocument> {
-    const tx_result: mintTxResult = await this.contractsService.mint(
-      nft.creator,
-      nft.metadata,
+    this.contract = new this.web3.eth.Contract(
+      mintNftContract.abi as AbiItem[],
+      this.contract_address,
     );
 
-    const created_nft: NFTDocument = new this.nftModel({
-      ...nft,
-      ...tx_result,
-    });
+    this.contract.events
+      .Transfer(undefined, function (error, event) {
+        if (error) console.log(error);
+      })
+      .on('data', (event) => {
+        const values = event.returnValues;
+        const token_id: string = values.tokenId.toString();
 
-    created_nft.save(function (err) {
-      if (err) console.log(err);
-    });
+        this.cacheManager.get<string>(token_id).then((res) => {
+          const nft = JSON.parse(res);
+          if (nft) {
+            const created_nft: NFTDocument = new this.nftModel({
+              ...nft,
+              tx_hash: event.transactionHash,
+              item_id: token_id,
+              contract_address: this.contract_address,
+              contract_type: 'ERC721',
+              supply: 1,
+              chain: 'ETH',
+              owner: values.to,
+            });
 
-    return created_nft;
+            created_nft.save(function (err) {
+              if (err) console.log(err);
+              else console.log(`NFT with token id ${token_id} minted`);
+            });
+          }
+        });
+      })
+      .on('connected', function (subscriptionId) {
+        // console.log(subscriptionId);
+      });
+  }
+
+  async createNFT(nft: CreateNftDto) {
+    const creator = nft.creator;
+    const web_url = this.configService.get<string>('WEB_ADDRESS');
+
+    const nft_string: string = JSON.stringify(nft);
+    const nft_hash = sha3(Date.now() + nft_string, {
+      outputLength: 256,
+    }).toString(CryptoJS.enc.Hex);
+    const token_id = BigInt('0x' + nft_hash).toString(10);
+
+    const deadline = Date.now() + 5 * 60 * 1000;
+    const metadata_uri = `${web_url}/products/metadata/${token_id}`;
+
+    const domain = [
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' },
+    ];
+
+    const createNft = [
+      { name: 'recipient', type: 'address' },
+      { name: 'tokenURI', type: 'string' },
+      { name: 'tokenId', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
+    ];
+
+    const domainData = {
+      name: 'Desi-NFT',
+      version: '0.0.1',
+      chainId: await this.web3.eth.net.getId(),
+      verifyingContract: this.contract_address,
+    };
+
+    const message = {
+      recipient: creator,
+      tokenURI: metadata_uri,
+      tokenId: token_id,
+      deadline: deadline,
+    };
+
+    const data: TypedMessage<MessageTypes> = {
+      types: {
+        EIP712Domain: domain,
+        createNft: createNft,
+      },
+      domain: domainData,
+      primaryType: 'createNft',
+      message: message,
+    };
+
+    this.cacheManager.set(token_id.toString(), nft_string, { ttl: 5 * 60 });
+    const signed = signTypedData({
+      privateKey: Buffer.from(this.private_key, 'hex'),
+      data: data,
+      version: SignTypedDataVersion.V3,
+    }).substring(2);
+
+    const tx = {
+      from: creator,
+      to: this.contract_address,
+      data: this.contract.methods
+        .mintNFT(
+          creator,
+          metadata_uri,
+          token_id,
+          deadline,
+          parseInt(signed.substring(128, 130), 16),
+          `0x${signed.substring(0, 64)}`,
+          `0x${signed.substring(64, 128)}`,
+        )
+        .encodeABI(),
+    };
+    return tx;
   }
 
   addNFT(nft) {
