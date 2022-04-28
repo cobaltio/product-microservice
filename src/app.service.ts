@@ -160,14 +160,6 @@ export class AppService {
     return tx;
   }
 
-  addNFT(nft) {
-    //distinguish between nft's. How??
-  }
-
-  deleteNFT(nft) {
-    // what's unique in an nft?
-  }
-
   findNft(data) {
     this.nftModel.find(...data);
   }
