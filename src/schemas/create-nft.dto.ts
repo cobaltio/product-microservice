@@ -5,6 +5,9 @@ export class CreateNftDto {
   @IsNotEmpty()
   metadata: Metadata;
 
+  @IsNotEmpty()
+  file: Express.Multer.File;
+
   supply: number;
 
   chain: string;
