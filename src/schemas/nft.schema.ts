@@ -15,7 +15,7 @@ export type NFTDocument = NFT & Document;
 @Schema()
 export class NFT {
   @Prop({ required: true, immutable: true })
-  item_id: number;
+  item_id: string;
 
   @Prop({ required: true, immutable: true })
   tx_hash: string;
