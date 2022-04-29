@@ -1,6 +1,7 @@
 import { CACHE_MANAGER, Inject, Injectable } from '@nestjs/common';
+import { writeFile } from 'fs';
 import { CreateNftDto } from './schemas/create-nft.dto';
-import { NFT, NFTDocument } from './schemas/nft.schema';
+import { Metadata, NFT, NFTDocument } from './schemas/nft.schema';
 import { Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import Web3 from 'web3';
@@ -84,10 +85,34 @@ export class AppService {
       });
   }
 
+  saveFile(owner: string, file: Express.Multer.File, filename: string) {
+    this.nftModel.findOne({ item_id: filename }).exec((err, nft) => {
+      if (!err && nft && !nft.metadata.image) {
+        const mimetype = file.mimetype;
+        const extension = mimetype
+          .substring(mimetype.lastIndexOf('/') + 1)
+          .toLowerCase();
+        writeFile(
+          `./data/${filename}.${extension}`,
+          Buffer.from(file.buffer),
+          (err) => {
+            if (err) console.log(err);
+          },
+        );
+
+        nft.metadata = {
+          ...nft.metadata,
+          image: `./data/${filename}.${extension}`,
+        };
+        nft.save();
+      }
+    });
+  }
+
   async createNFT(nft: CreateNftDto) {
     const creator = nft.creator;
     const web_url = this.configService.get<string>('WEB_ADDRESS');
-
+    nft.metadata.image = null;
     const nft_string: string = JSON.stringify(nft);
     const nft_hash = sha3(Date.now() + nft_string, {
       outputLength: 256,
