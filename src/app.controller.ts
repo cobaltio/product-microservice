@@ -6,7 +6,12 @@ import {
 import { MessagePattern } from '@nestjs/microservices';
 import { AppService } from './app.service';
 import { CreateNftDto } from './schemas/create-nft.dto';
-import { NFTEntity } from './schemas/nft.entity';
+
+type SaveFile = {
+  file: Express.Multer.File;
+  item_id: string;
+  creator: string;
+};
 
 @Controller()
 export class AppController {
@@ -18,9 +23,9 @@ export class AppController {
     return this.appService.createNFT(nft);
   }
 
-  @MessagePattern({ cmd: 'add-nft' })
-  async add(nft) {
-    this.appService.createNFT(nft);
+  @MessagePattern({ cmd: 'upload-nft' })
+  async add(nft: SaveFile) {
+    this.appService.saveFile(nft.creator, nft.file, nft.item_id);
   }
 
   @MessagePattern({ cmd: 'get-nft' })
