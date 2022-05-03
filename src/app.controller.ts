@@ -3,7 +3,7 @@ import {
   UseInterceptors,
   ClassSerializerInterceptor,
 } from '@nestjs/common';
-import { MessagePattern } from '@nestjs/microservices';
+import { MessagePattern, RpcException } from '@nestjs/microservices';
 import { AppService } from './app.service';
 import { CreateNftDto } from './schemas/create-nft.dto';
 
@@ -25,7 +25,11 @@ export class AppController {
 
   @MessagePattern({ cmd: 'upload-nft' })
   async add(nft: SaveFile) {
-    this.appService.saveFile(nft.creator, nft.file, nft.item_id);
+    try {
+      await this.appService.saveFile(nft.creator, nft.file, nft.item_id);
+    } catch (err) {
+      return new RpcException(err);
+    }
   }
 
   @MessagePattern({ cmd: 'get-nft' })

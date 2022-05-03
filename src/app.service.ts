@@ -19,6 +19,8 @@ import {
   TypedMessage,
   MessageTypes,
 } from '@metamask/eth-sig-util';
+import { resolve } from 'path';
+import { NFTEntity } from './schemas/nft.entity';
 
 type mintTxResult = {
   tx_hash: string;
@@ -70,7 +72,6 @@ export class AppService {
               contract_type: 'ERC721',
               supply: 1,
               chain: 'ETH',
-              owner: values.to,
             });
 
             created_nft.save(function (err) {
@@ -86,25 +87,28 @@ export class AppService {
   }
 
   saveFile(owner: string, file: Express.Multer.File, filename: string) {
-    this.nftModel.findOne({ item_id: filename }).exec((err, nft) => {
-      if (!err && nft && !nft.metadata.image) {
-        const mimetype = file.mimetype;
-        const extension = mimetype
-          .substring(mimetype.lastIndexOf('/') + 1)
-          .toLowerCase();
-        writeFile(
-          `./data/${filename}.${extension}`,
-          Buffer.from(file.buffer),
-          (err) => {
-            if (err) console.log(err);
-          },
-        );
-
-        nft.metadata = {
-          ...nft.metadata,
-          image: `./data/${filename}.${extension}`,
-        };
-        nft.save();
+    // Check if a transaction was created for the particular token_id or filename
+    return this.cacheManager.get<string>(filename).then((res) => {
+      if (!res) throw new Error('No create transaction found');
+      // rejects if not found
+      else {
+        const nft: CreateNftDto = JSON.parse(res);
+        if (nft.owner === owner) {
+          // write to file in folder ./data/
+          const mimetype = file.mimetype;
+          const extension = mimetype
+            .substring(mimetype.lastIndexOf('/') + 1)
+            .toLowerCase();
+          writeFile(
+            `./data/${filename}.${extension}`,
+            Buffer.from(file.buffer),
+            (err) => {
+              if (err) console.log(err);
+            },
+          );
+        } else {
+          throw new Error('No such NFT found');
+        }
       }
     });
   }
@@ -112,7 +116,8 @@ export class AppService {
   async createNFT(nft: CreateNftDto) {
     const creator = nft.creator;
     const web_url = this.configService.get<string>('WEB_ADDRESS');
-    nft.metadata.image = null;
+
+    // Generate token_id by hashing metadata
     const nft_string: string = JSON.stringify(nft);
     const nft_hash = sha3(Date.now() + nft_string, {
       outputLength: 256,
@@ -120,7 +125,10 @@ export class AppService {
     const token_id = BigInt('0x' + nft_hash).toString(10);
 
     const deadline = Date.now() + 5 * 60 * 1000;
+
     const metadata_uri = `${web_url}/products/metadata/${token_id}`;
+
+    nft.metadata.image = `${web_url}/products/media/${token_id}`;
 
     const domain = [
       { name: 'name', type: 'string' },
@@ -182,7 +190,7 @@ export class AppService {
         )
         .encodeABI(),
     };
-    return tx;
+    return { token_id: token_id, tx: tx };
   }
 
   findNft(data) {
