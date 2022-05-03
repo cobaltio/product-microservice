@@ -11,4 +11,7 @@ export class CreateNftDto {
 
   @IsNotEmpty()
   creator: string;
+
+  @IsNotEmpty()
+  owner: string;
 }
