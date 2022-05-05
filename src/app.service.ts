@@ -15,22 +15,9 @@ import CryptoJS from 'crypto-js';
 import {
   signTypedData,
   SignTypedDataVersion,
-  recoverTypedSignature,
   TypedMessage,
   MessageTypes,
 } from '@metamask/eth-sig-util';
-import { resolve } from 'path';
-import { NFTEntity } from './schemas/nft.entity';
-
-type mintTxResult = {
-  tx_hash: string;
-  item_id: string;
-  contract_address: string;
-  contract_type: string;
-  supply: number;
-  chain: string;
-  owner: string;
-};
 
 @Injectable()
 export class AppService {
@@ -193,7 +180,8 @@ export class AppService {
     return { token_id: token_id, tx: tx };
   }
 
-  findNft(data) {
-    this.nftModel.find(...data);
+  async findNft(data) {
+    const { owner } = await this.nftModel.findOne(...data).exec();
+    return owner;
   }
 }

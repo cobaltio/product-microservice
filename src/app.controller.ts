@@ -33,7 +33,7 @@ export class AppController {
   }
 
   @MessagePattern({ cmd: 'get-nft' })
-  async getNft(data): Promise<void> {
-    this.appService.findNft(data);
+  async getNft(data) {
+    return this.appService.findNft(data);
   }
 }
