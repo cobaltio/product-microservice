@@ -36,4 +36,9 @@ export class AppController {
   async getNft(data) {
     return this.appService.findNft(data);
   }
+
+  @MessagePattern({ cmd: 'update-owner' })
+  async updateOwner(data) {
+    await this.appService.updateOwner(data.item_id, data.owner);
+  }
 }
