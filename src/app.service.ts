@@ -180,6 +180,10 @@ export class AppService {
     return { token_id: token_id, tx: tx };
   }
 
+  updateOwner(item_id: string, owner: string) {
+    this.nftModel.updateOne({ item_id: item_id }, { owner: owner });
+  }
+
   async findNft(data) {
     const { owner } = await this.nftModel.findOne(...data).exec();
     return owner;
