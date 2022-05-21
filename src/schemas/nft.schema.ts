@@ -3,7 +3,7 @@ import { Document } from 'mongoose';
 
 export class Metadata {
   name: string;
-  image: string;
+  image?: string;
   external_url?: string;
   animation_url?: string;
   description?: string;
@@ -37,6 +37,9 @@ export class NFT {
 
   @Prop({ required: true })
   contract_type: string;
+
+  @Prop({ default: false })
+  is_listed: boolean;
 
   @Prop({ required: true })
   creator: string;

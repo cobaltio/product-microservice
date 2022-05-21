@@ -1,7 +1,7 @@
 import { CACHE_MANAGER, Inject, Injectable } from '@nestjs/common';
 import { writeFile } from 'fs';
 import { CreateNftDto } from './schemas/create-nft.dto';
-import { Metadata, NFT, NFTDocument } from './schemas/nft.schema';
+import { Metadata, NFT, NFTDocument, NFTSchema } from './schemas/nft.schema';
 import { Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import Web3 from 'web3';
@@ -18,6 +18,7 @@ import {
   TypedMessage,
   MessageTypes,
 } from '@metamask/eth-sig-util';
+import { doc } from 'prettier';
 
 @Injectable()
 export class AppService {
@@ -105,8 +106,8 @@ export class AppService {
     const web_url = this.configService.get<string>('WEB_ADDRESS');
 
     // Generate token_id by hashing metadata
-    const nft_string: string = JSON.stringify(nft);
-    const nft_hash = sha3(Date.now() + nft_string, {
+    const pre_hash: string = JSON.stringify(nft);
+    const nft_hash = sha3(Date.now() + pre_hash, {
       outputLength: 256,
     }).toString(CryptoJS.enc.Hex);
     const token_id = BigInt('0x' + nft_hash).toString(10);
@@ -114,8 +115,11 @@ export class AppService {
     const deadline = Date.now() + 5 * 60 * 1000;
 
     const metadata_uri = `${web_url}/products/metadata/${token_id}`;
-
-    nft.metadata.image = `${web_url}/products/media/${token_id}`;
+    const metadata = {
+      ...nft.metadata,
+      image: `${web_url}/products/media/${token_id}`,
+    };
+    nft.metadata = metadata;
 
     const domain = [
       { name: 'name', type: 'string' },
@@ -155,7 +159,9 @@ export class AppService {
       message: message,
     };
 
-    this.cacheManager.set(token_id.toString(), nft_string, { ttl: 5 * 60 });
+    this.cacheManager.set(token_id.toString(), JSON.stringify(nft), {
+      ttl: 5 * 60,
+    });
     const signed = signTypedData({
       privateKey: Buffer.from(this.private_key, 'hex'),
       data: data,
@@ -184,8 +190,21 @@ export class AppService {
     this.nftModel.updateOne({ item_id: item_id }, { owner: owner });
   }
 
+  async getNft(data) {
+    const nfts = await this.nftModel.find(...data).exec();
+    console.log(data);
+    return nfts;
+  }
+
   async findNft(data) {
     const { owner } = await this.nftModel.findOne(...data).exec();
     return owner;
+  }
+
+  async setListed(data) {
+    const item_id = data.item_id;
+    const nft = await this.nftModel.findOne({ item_id: item_id }).exec();
+    nft.is_listed = data.flag;
+    await nft.save();
   }
 }
